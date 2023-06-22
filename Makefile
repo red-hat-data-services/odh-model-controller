@@ -40,8 +40,8 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+manifests: controller-gen ## Generate ClusterRole objects.
+	$(CONTROLLER_GEN) rbac:roleName=odh-model-controller-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 external-manifests: 
 	go get github.com/kserve/modelmesh-serving
