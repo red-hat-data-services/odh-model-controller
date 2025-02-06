@@ -1,4 +1,4 @@
-# ODH Model Controller
+# ODH Model Controller 
 
 The controller will watch the Predictor custom resource events to
 extend the KServe modelmesh-serving controller behavior with the following
