@@ -17,6 +17,8 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/go-logr/logr"
 	kservev1alpha1 "github.com/kserve/kserve/pkg/apis/serving/v1alpha1"
 	kservev1beta1 "github.com/kserve/kserve/pkg/apis/serving/v1beta1"
@@ -210,11 +212,49 @@ func (r *OpenshiftInferenceServiceReconciler) onDeletion(ctx context.Context, lo
 }
 
 func (r *OpenshiftInferenceServiceReconciler) DeleteResourcesIfNoIsvcExists(ctx context.Context, log logr.Logger, namespace string) error {
-	if err := r.kserveServerlessISVCReconciler.CleanupNamespaceIfNoKserveIsvcExists(ctx, log, namespace); err != nil {
+	// If there are no ISVCs left, all 3 of these functions get called. Issue is that when the Serverless reconciler gets called
+	// and there is no servicemesh installed (which is the case with RawDeployment) the Serverless reconciler will fail when it calls
+	// the subresourcereconciler Cleanup function. This is because the Serverless reconciler will try to get the ServiceMesh resources and clean them up.
+	// Adding a no match error check will prevent this from erroring out due to that.
+	inferenceServiceList := &kservev1beta1.InferenceServiceList{}
+	if err := r.client.List(ctx, inferenceServiceList, client.InNamespace(namespace)); err != nil {
 		return err
 	}
-	if err := r.mmISVCReconciler.DeleteModelMeshResourcesIfNoMMIsvcExists(ctx, log, namespace); err != nil {
-		return err
+
+	var existingServerlessIsvcs []kservev1beta1.InferenceService
+	var existingRawIsvcs []kservev1beta1.InferenceService
+	var existingModelMeshIsvcs []kservev1beta1.InferenceService
+	for _, isvc := range inferenceServiceList.Items {
+		isvcDeploymentMode, err := utils.GetDeploymentModeForIsvc(ctx, r.client, &isvc)
+		if err != nil {
+			return err
+		}
+		switch isvcDeploymentMode {
+		case utils.Serverless:
+			if isvc.GetDeletionTimestamp() == nil {
+				existingServerlessIsvcs = append(existingServerlessIsvcs, isvc)
+			}
+		case utils.RawDeployment:
+			if isvc.GetDeletionTimestamp() == nil {
+				existingRawIsvcs = append(existingRawIsvcs, isvc)
+			}
+		case utils.ModelMesh:
+			if isvc.GetDeletionTimestamp() == nil {
+				existingModelMeshIsvcs = append(existingModelMeshIsvcs, isvc)
+			}
+		default:
+			return fmt.Errorf("Unknown deployment mode for InferenceService: %v", isvc)
+		}
+	}
+	if len(existingServerlessIsvcs) == 0 {
+		if err := r.kserveServerlessISVCReconciler.CleanupNamespaceIfNoKserveIsvcExists(ctx, log, namespace); err != nil {
+			return err
+		}
+	}
+	if len(existingModelMeshIsvcs) == 0 {
+		if err := r.mmISVCReconciler.DeleteModelMeshResourcesIfNoMMIsvcExists(ctx, log, namespace); err != nil {
+			return err
+		}
 	}
 	return nil
 }
