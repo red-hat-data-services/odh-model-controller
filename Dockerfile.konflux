@@ -32,7 +32,8 @@ FROM registry.redhat.io/ubi8/ubi-minimal@sha256:43dde01be4e94afd22d8d95ee8abcc9f
 ARG USER=2000
 
 LABEL com.redhat.component="odh-model-controller-container" \
-      name="managed-open-data-hub/odh-model-controller-rhel8" \
+      name="rhoai/odh-model-controller-rhel8" \
+      cpe="cpe:/a:redhat:openshift_ai:2.19::el8" \
       description="The controller removes the need for users to perform manual steps when deploying their models" \
       summary="odh-model-controller" \
       maintainer="['managed-open-data-hub@redhat.com']" \
