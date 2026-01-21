@@ -156,3 +156,6 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 )
+
+// CVE-2025-68156: Update expr-lang/expr to v1.17.7
+replace github.com/expr-lang/expr => github.com/expr-lang/expr v1.17.7
