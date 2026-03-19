@@ -4,3 +4,4 @@ exclude:
   global:
     - hack/**
     - test/**
+    - dev_tools/**
