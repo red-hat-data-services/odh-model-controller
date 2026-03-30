@@ -4,7 +4,8 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.25@sha256:6da1160c0e8da15b5855
 # These built-in args are defined in the global scope, and are not automatically
 # accessible within build stages or RUN commands.
 # To expose these arguments inside the build stage, we need to redefine it without a value.
-ARG TARGETOS TARGETARCH
+ARG TARGETOS
+ARG TARGETARCH
 RUN echo "GOOS=${TARGETOS} GOARCH=${TARGETARCH}"
 
 WORKDIR /go/src/github.com/opendatahub-io/odh-model-controller
@@ -24,19 +25,20 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOFLAGS=-mod=mod \
     go build -tags strictfipsruntime -a -o model-serving-api ./server/
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-RUN microdnf install -y --disablerepo=* --enablerepo=ubi-9-baseos-rpms shadow-utils && \
-    useradd model-serving-api -m -u 1000 && \
-    microdnf remove -y shadow-utils && \
-    microdnf clean all
+
+ARG USER=1000
 
 COPY --from=builder /go/src/github.com/opendatahub-io/odh-model-controller/model-serving-api /
-USER 1000:1000
+USER ${USER}
 
 ENTRYPOINT ["/model-serving-api"]
 
-LABEL com.redhat.component="odh-model-serving-api" \
-      name="odh-model-serving-api" \
-      description="odh-model-serving-api" \
+LABEL com.redhat.component="odh-model-serving-api-container" \
+      name="managed-open-data-hub/odh-model-serving-api-rhel9" \
+      description="API Server for model serving" \
       summary="odh-model-serving-api" \
+      maintainer="['managed-open-data-hub@redhat.com']" \
+      io.openshift.expose-services="" \
       io.k8s.display-name="odh-model-serving-api" \
-      io.k8s.description="odh-model-serving-api"
+      io.k8s.description="odh-model-serving-api" \
+      com.redhat.license_terms="https://www.redhat.com/licenses/Red_Hat_Standard_EULA_20191108.pdf"
