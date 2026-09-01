@@ -2,7 +2,9 @@ name: Sync Manifests to kserve
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'rhoai-[0-9].[0-9]**'
     paths: ['config/**']
   workflow_dispatch:
 
@@ -20,7 +22,7 @@ jobs:
           echo "Target: ${{ github.repository_owner }}/kserve @ ${{ github.ref_name }}"
 
       - name: Checkout odh-model-controller
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: odh-model-controller
 
