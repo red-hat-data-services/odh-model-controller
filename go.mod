@@ -1,6 +1,6 @@
 module github.com/opendatahub-io/odh-model-controller
 
-go 1.26.5
+go 1.26.7
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
