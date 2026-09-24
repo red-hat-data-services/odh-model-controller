@@ -9,10 +9,10 @@ NAMESPACE ?= opendatahub
 KSERVE_E2E_NAMESPACE ?= kserve
 # Upstream Go for post-KServe OCP e2e. Prow ships Red Hat Go with GOTOOLCHAIN=local
 # forced, which cannot satisfy go.mod (env overrides are ignored by RH Go).
-E2E_GO_VERSION ?= 1.25.8
-# Official checksums from https://go.dev/dl/?mode=json&include=all (go1.25.8).
-E2E_GO_SHA256_AMD64 ?= ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6
-E2E_GO_SHA256_ARM64 ?= 7d137f59f66bb93f40a6b2b11e713adc2a9d0c8d9ae581718e3fad19e5295dc7
+E2E_GO_VERSION ?= 1.26.7
+# Official checksums from https://go.dev/dl/?mode=json&include=all (go1.26.7).
+E2E_GO_SHA256_AMD64 ?= 92e8b34bff3c89ab16404c595669ac8cb004cc2f676dcbd1f5b87a6b8def3b47
+E2E_GO_SHA256_ARM64 ?= 020a1e8224811be75163e920bc77e0926a1390a6aeea19bdcf23f74b9d749f6d
 E2E_GO_ROOT = $(LOCALBIN)/go$(E2E_GO_VERSION)
 E2E_GO = $(E2E_GO_ROOT)/bin/go
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
