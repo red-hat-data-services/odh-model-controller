@@ -45,6 +45,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/opendatahub-io/odh-model-controller/internal/controller/constants"
 	corecontroller "github.com/opendatahub-io/odh-model-controller/internal/controller/core"
 	"github.com/opendatahub-io/odh-model-controller/internal/controller/nim"
 	servingcontroller "github.com/opendatahub-io/odh-model-controller/internal/controller/serving"
@@ -275,11 +276,12 @@ func createManager(cfg *rest.Config, metricsAddr, probeAddr string,
 		Cache: cache.Options{
 			DefaultTransform: cache.TransformStripManagedFields(),
 			ByObject: map[client.Object]cache.ByObject{
-				// Strip ConfigMap data from the informer cache to prevent OOM
-				// from cluster-wide caching while still delivering watch events
-				// for external ConfigMaps (CA bundles, etc.). Payload reads use
-				// direct API calls via DisableFor above.
+				// Cache only ODH-managed ConfigMaps. External ConfigMaps use
+				// narrow metadata-only sources in the controllers that consume them.
 				&corev1.ConfigMap{}: {
+					Label: labels.SelectorFromSet(labels.Set{
+						constants.ODHManaged: "true",
+					}),
 					Transform: informercache.StripConfigMapData,
 				},
 				&corev1.Secret{}: {
