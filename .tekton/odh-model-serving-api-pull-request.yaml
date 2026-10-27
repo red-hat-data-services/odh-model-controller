@@ -18,6 +18,9 @@
     name: odh-model-serving-api-on-pull-request-92616
     namespace: rhoai-tenant
   spec:
+    timeouts:
+      pipeline: 8h
+      tasks: 4h
     params:
     - name: git-url
       value: '{{source_url}}'
