@@ -5,11 +5,10 @@ on:
     branches:
       - 'rhoai-[0-9].[0-9]**'
     types: [closed]
-    paths: ['config/**']
+    paths: ['legacy/config/**']
   push:
-    branches:
-      - main
-    paths: ['config/**']
+    branches: [main]
+    paths: ['legacy/config/**']
   workflow_dispatch:
 
 permissions:
@@ -22,18 +21,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TARGET_BRANCH: ${{ github.event_name == 'pull_request_target' && github.base_ref || github.ref_name }}
+      # Hoisted to job env so step-level `if:` conditions can read them; the
+      # secrets context is not available in step-level if expressions.
+      SLACK_WEBHOOK: ${{ secrets.RHOAI_DEVOPS_SLACK_WEBHOOK }}
+      SLACK_MENTIONS: ${{ vars.RHOAI_SLACK_MENTIONS }}
     steps:
       - name: Print sync parameters
         run: |
           echo "Source: ${{ github.repository }} @ ${{ env.TARGET_BRANCH }}"
           echo "Target: ${{ github.repository_owner }}/kserve @ ${{ env.TARGET_BRANCH }}"
 
-      - name: Checkout odh-model-controller
-        uses: actions/checkout@v7
+      - name: Checkout workload-variant-autoscaler
         id: checkout-source
+        uses: actions/checkout@v4
         with:
           ref: ${{ env.TARGET_BRANCH }}
-          path: odh-model-controller
+          path: workload-variant-autoscaler
+
       - name: Generate token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -53,10 +57,10 @@ jobs:
 
       - name: Sync manifests
         run: |
-          DEST="kserve/kserve-module/prefetched-manifests-rhoai/modelcontroller"
+          DEST="kserve/kserve-module/prefetched-manifests-rhoai/wva"
           rm -rf "$DEST"
           mkdir -p "$DEST"
-          cp -r odh-model-controller/config/. "$DEST/"
+          cp -r workload-variant-autoscaler/legacy/config/. "$DEST/"
 
       - name: Detect changes
         id: changes
@@ -79,8 +83,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all kserve-module/prefetched-manifests-rhoai/modelcontroller/
-          git commit -m "chore: sync odh-model-controller manifests from ${REPO_OWNER}/odh-model-controller@${SOURCE_SHA:0:8}"
+          git add --all kserve-module/prefetched-manifests-rhoai/wva/
+          git commit -m "chore: sync workload-variant-autoscaler manifests from ${REPO_OWNER}/workload-variant-autoscaler@${SOURCE_SHA:0:8}"
           MAX_RETRIES=5
           for attempt in $(seq 1 $MAX_RETRIES); do
             if git push origin "$SOURCE_BRANCH"; then
@@ -103,9 +107,6 @@ jobs:
         # armed, and why not if they are not. Env-indirect so the webhook
         # value is never interpolated into the script body.
         if: always()
-        env:
-          SLACK_WEBHOOK: ${{ secrets.RHOAI_DEVOPS_SLACK_WEBHOOK }}
-          SLACK_MENTIONS: ${{ vars.RHOAI_SLACK_MENTIONS }}
         run: |
           armed=true
           if [ -z "$SLACK_WEBHOOK" ]; then
@@ -129,16 +130,16 @@ jobs:
       - name: Notify on failure
         # Dormant until RHOAI_DEVOPS_SLACK_WEBHOOK (secret) and
         # RHOAI_SLACK_MENTIONS (variable, e.g. '<!subteam^S…>') are set.
+        # Gated on job env because the secrets context is not available
+        # in step-level if expressions.
         if: >-
           failure() &&
-          secrets.RHOAI_DEVOPS_SLACK_WEBHOOK != '' &&
-          vars.RHOAI_SLACK_MENTIONS != ''
+          env.SLACK_WEBHOOK != '' &&
+          env.SLACK_MENTIONS != ''
         uses: rtcamp/action-slack-notify@sha256:17fac87b8ea4ffec1f90b855f7f88e8fd69ec8568f690f4ea24d5a408eeee419a
         env:
-          SLACK_WEBHOOK: ${{ secrets.RHOAI_DEVOPS_SLACK_WEBHOOK }}
           SLACK_COLOR: danger
           SLACK_TITLE: Manifest sync to kserve failed (odh-model-controller)
-          SLACK_MENTIONS: ${{ vars.RHOAI_SLACK_MENTIONS }}
           SLACK_MESSAGE: |
             sync-manifests-to-kserve failed on ${{ github.ref_name }}.
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
