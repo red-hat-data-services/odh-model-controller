@@ -1,5 +1,5 @@
 # Build the model-serving-api binary
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26@sha256:685ccca486cc2c82b0818d835abecb1aed7a396e76ba416cfc47c28067f5d365 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26@sha256:0e3894cea4fc077084245e8aa2befc8a7d91a4f60fbf850f0b5b555cbe62ee26 AS builder
 
 # These built-in args are defined in the global scope, and are not automatically
 # accessible within build stages or RUN commands.
@@ -17,6 +17,7 @@ RUN go mod download
 
 # Copy the go source
 COPY server/ server/
+COPY pkg/tls/ pkg/tls/
 
 # Build
 USER root
@@ -24,7 +25,7 @@ RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOFLAGS=-mod=mod \
     GOEXPERIMENT=strictfipsruntime \
     go build -tags strictfipsruntime -a -o model-serving-api ./server/
 
-FROM registry.redhat.io/ubi9/ubi-minimal-pqc@sha256:8a842ac769de709143e4edeace516f2008dfdc431b64670ad3353fa323b44736
+FROM registry.redhat.io/ubi9/ubi-minimal-pqc:9.8@sha256:d638f3b49b79575329aacdae2739f954effe2467c12147711e73445c4fc97819
 
 ARG USER=1000
 
