@@ -19,6 +19,9 @@ metadata:
   name: odh-model-controller-on-pull-request-38156
   namespace: rhoai-tenant
 spec:
+  timeouts:
+    pipeline: 8h
+    tasks: 4h
   params:
   - name: git-url
     value: '{{source_url}}'
