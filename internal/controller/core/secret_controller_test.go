@@ -1,0 +1,264 @@
+/*
+Copyright 2024.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package core
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"reflect"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/opendatahub-io/odh-model-controller/internal/controller/constants"
+)
+
+var _ = Describe("Secret Controller (StorageConfig controller)", func() {
+	Context("when a dataconnection secret that has 'opendatahub.io/managed=true' and 'opendatahub.io/dashboard=true' is created", func() {
+		It("should create a storage-config secret", func() {
+			By("creating dataconnection secrets")
+			dataconnectionHttpStringSecret := &corev1.Secret{}
+			err := convertToStructuredResource(dataconnectionHttpStringPath, dataconnectionHttpStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			dataconnectionHttpsStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpsStringPath, dataconnectionHttpsStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			storegeconfigSecret := WaitForResourceWithCondition(ctx, k8sClient, WorkingNamespace,
+				constants.DefaultStorageConfig, &corev1.Secret{},
+				func(s *corev1.Secret) error {
+					if len(s.Data) != 2 {
+						return fmt.Errorf("expected 2 entries, got %d", len(s.Data))
+					}
+					return nil
+				})
+
+			expectedStorageConfigSecret := &corev1.Secret{}
+			err = convertToStructuredResource(storageconfigEncodedPath, expectedStorageConfigSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(compareSecrets(storegeconfigSecret, expectedStorageConfigSecret)).Should(BeTrue())
+		})
+	})
+
+	Context("when all dataconnection secrets that have 'opendatahub.io/managed=true' and 'opendatahub.io/dashboard=true' labels are removed", func() {
+		It("should delete existing storage-config secret if the secret has 'opendatahub.io/managed=true' label", func() {
+			By("creating dataconnection secrets")
+			dataconnectionHttpStringSecret := &corev1.Secret{}
+			err := convertToStructuredResource(dataconnectionHttpStringPath, dataconnectionHttpStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			dataconnectionHttpsStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpsStringPath, dataconnectionHttpsStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			WaitForResource(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+
+			By("deleting the dataconnection secrets")
+			Expect(k8sClient.Delete(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			WaitForResourceDeletion(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+		})
+
+		It("should not delete existing storage-config secret if the secret does not have 'opendatahub.io/managed=true' label", func() {
+			By("creating dataconnection secrets")
+			dataconnectionHttpStringSecret := &corev1.Secret{}
+			err := convertToStructuredResource(dataconnectionHttpStringPath, dataconnectionHttpStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			dataconnectionHttpsStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpsStringPath, dataconnectionHttpsStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			WaitForResourceWithCondition(ctx, k8sClient, WorkingNamespace,
+				constants.DefaultStorageConfig, &corev1.Secret{},
+				func(s *corev1.Secret) error {
+					if len(s.Data) != 2 {
+						return fmt.Errorf("expected 2 entries, got %d", len(s.Data))
+					}
+					return nil
+				})
+
+			By("updating storage-config label opendatahub.io/managed: false")
+			err = updateSecretLabel(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, "opendatahub.io/managed", "false")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("deleting the dataconnection secrets")
+			Expect(k8sClient.Delete(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			WaitForResource(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+		})
+	})
+
+	Context("when the label 'opendatahub.io/managed=true' in a 'storage-config' secret is set to false", func() {
+		It("should be excluded from reconcile target of storageConfig controller ", func() {
+			By("creating dataconnection secrets")
+			dataconnectionHttpStringSecret := &corev1.Secret{}
+			err := convertToStructuredResource(dataconnectionHttpStringPath, dataconnectionHttpStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			dataconnectionHttpsStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpsStringPath, dataconnectionHttpsStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			WaitForResource(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+
+			By("updating storage-config label opendatahub.io/managed: false")
+			err = updateSecretLabel(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, "opendatahub.io/managed", "false")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating storage-config secret data")
+			err = updateSecretData(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, "aws-connection-minio-http", "unmanaged")
+			Expect(err).NotTo(HaveOccurred())
+			err = updateSecretData(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, "aws-connection-minio-https", "unmanaged")
+			Expect(err).NotTo(HaveOccurred())
+
+			storageconfigSecret := WaitForResource(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+
+			expectedStorageConfigSecret := &corev1.Secret{}
+			err = convertToStructuredResource(storageconfigEncodedUnmanagedPath, expectedStorageConfigSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(compareSecrets(storageconfigSecret, expectedStorageConfigSecret)).Should(BeTrue())
+		})
+	})
+
+	Context("when a configmap 'odh-kserve-custom-ca-bundle' exists or updates", func() {
+		It("should add/update certificate keys into storage-config secret if the endpoint is https", func() {
+			By("creating the odh-kserve-custom-ca-bundle configmap")
+			odhtrustedcacertConfigMap := &corev1.ConfigMap{}
+			err := convertToStructuredResource(odhtrustedcabundleConfigMapPath, odhtrustedcacertConfigMap)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, odhtrustedcacertConfigMap)).Should(Succeed())
+			openshiftServiceCAConfigMap := &corev1.ConfigMap{}
+			err = convertToStructuredResource(openshiftServiceCAConfigMapPath, openshiftServiceCAConfigMap)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, openshiftServiceCAConfigMap)).Should(Succeed())
+
+			WaitForResource(ctx, k8sClient, WorkingNamespace, constants.KServeCACertConfigMapName, &corev1.ConfigMap{})
+
+			By("creating dataconnection secrets")
+			dataconnectionHttpStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpStringPath, dataconnectionHttpStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpStringSecret)).Should(Succeed())
+			dataconnectionHttpsStringSecret := &corev1.Secret{}
+			err = convertToStructuredResource(dataconnectionHttpsStringPath, dataconnectionHttpsStringSecret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, dataconnectionHttpsStringSecret)).Should(Succeed())
+
+			// Check storage-config secret
+			storageconfigSecret := WaitForResourceWithCondition(ctx, k8sClient, WorkingNamespace,
+				constants.DefaultStorageConfig, &corev1.Secret{},
+				func(s *corev1.Secret) error {
+					if len(s.Data) != 2 {
+						return fmt.Errorf("expected 2 entries, got %d", len(s.Data))
+					}
+					return nil
+				})
+			expectedStorageConfigSecret := &corev1.Secret{}
+			err = convertToStructuredResource(storageconfigCertEncodedPath, expectedStorageConfigSecret)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(compareSecrets(storageconfigSecret, expectedStorageConfigSecret)).Should(BeTrue())
+
+			By("updating odh-kserve-custom-ca-bundle configmap")
+			updatedOdhtrustedcacertConfigMap := &corev1.ConfigMap{}
+			err = convertToStructuredResource(odhtrustedcabundleConfigMapUpdatedPath, updatedOdhtrustedcacertConfigMap)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Update(ctx, updatedOdhtrustedcacertConfigMap)).Should(Succeed())
+			updatedOpenshiftServiceCAConfigMap := &corev1.ConfigMap{}
+			err = convertToStructuredResource(openshiftServiceCAConfigMapUpdatedPath, updatedOpenshiftServiceCAConfigMap)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Update(ctx, updatedOpenshiftServiceCAConfigMap)).Should(Succeed())
+
+			// Check updated storage-config secret
+			updatedStorageconfigSecret := WaitForResource(ctx, k8sClient, WorkingNamespace, constants.DefaultStorageConfig, &corev1.Secret{})
+			expectedUpdatedStorageConfigSecret := &corev1.Secret{}
+			err = convertToStructuredResource(storageconfigCertEncodedUpdatedPath, expectedUpdatedStorageConfigSecret)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(compareSecrets(updatedStorageconfigSecret, expectedUpdatedStorageConfigSecret)).Should(BeTrue())
+		})
+	})
+})
+
+func updateSecretData(ctx context.Context, cli client.Client, namespace, secretName string, dataKey string, dataValue string) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		secret := &corev1.Secret{}
+		err := cli.Get(ctx, client.ObjectKey{Name: secretName, Namespace: namespace}, secret)
+		if err != nil {
+			log.Printf("Error getting Secret: %v\n", err)
+			return err
+		}
+
+		// Add the new data to the Secret
+		if secret.Data == nil {
+			secret.Data = make(map[string][]byte)
+		}
+		secret.Data[dataKey] = []byte(dataValue)
+
+		// Save the updated Secret
+		err = cli.Update(ctx, secret)
+		if err != nil {
+			log.Printf("Error updating Secret: %v\n", err)
+			return err
+		}
+		return nil
+	})
+}
+
+func updateSecretLabel(ctx context.Context, cli client.Client, namespace, secretName string, labelKey string, labelValue string) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		secret := &corev1.Secret{}
+		err := cli.Get(ctx, client.ObjectKey{Name: secretName, Namespace: namespace}, secret)
+		if err != nil {
+			log.Printf("Error getting Secret: %v\n", err)
+			return err
+		}
+
+		// Update the label
+		if secret.Labels == nil {
+			secret.Labels = make(map[string]string)
+		}
+		secret.Labels[labelKey] = labelValue
+
+		// Save the updated Secret
+		err = cli.Update(ctx, secret)
+		if err != nil {
+			log.Printf("Error updating Secret: %v\n", err)
+			return err
+		}
+		log.Printf("Updated Secret label: %s: %s\n", labelKey, labelValue)
+		return nil
+	})
+}
+
+// compareSecrets checks if two Secret data are equal, if not return false
+func compareSecrets(s1 *corev1.Secret, s2 *corev1.Secret) bool {
+	// Two Secret will be equal if the data is identical
+	return reflect.DeepEqual(s1.Data, s2.Data)
+}
