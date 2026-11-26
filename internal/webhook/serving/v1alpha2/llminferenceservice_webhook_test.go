@@ -66,12 +66,12 @@ func newLLMFakeClient(objs ...client.Object) client.Client {
 	return b.Build()
 }
 
-// newLLMDefaulter instantiates LLMInferenceServiceCustomDefaulter with a fake client.
-func newLLMDefaulter(cli client.Client) *LLMInferenceServiceCustomDefaulter {
-	return &LLMInferenceServiceCustomDefaulter{
+// newLLMDefaulter instantiates the v1alpha2 defaulter with a fake client.
+func newLLMDefaulter(cli client.Client) *llmISVCDefaulterV1alpha2 {
+	return &llmISVCDefaulterV1alpha2{&LLMInferenceServiceCustomDefaulter{
 		client:    cli,
 		apiReader: cli,
-	}
+	}}
 }
 
 // llmAdmissionCtx returns a context carrying an admission request.
@@ -896,7 +896,7 @@ var _ = Describe("LLMInferenceService ConnectionsAPI Defaulter", func() {
 			secret := testutils.BuildSecret(llmURISecretName, llmNS, "uri",
 				map[string][]byte{"URI": []byte("hf://meta-llama/Llama-4")})
 			cli := newLLMFakeClient(secret)
-			d := newLLMDefaulter(cli)
+			d := &llmISVCDefaulterV1alpha1{&LLMInferenceServiceCustomDefaulter{client: cli, apiReader: cli}}
 			llmisvc := &kservev1alpha1.LLMInferenceService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      llmISVCName,
